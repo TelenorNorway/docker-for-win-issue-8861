@@ -1,2 +1,87 @@
 # docker-for-win-issue-8861
-Repo for PoC code relating to issue 8861 in the docker/for-win project
+Repo for PoC code relating to https://github.com/docker/for-win/issues/8861
+
+# Pre-req:
+- Docker
+
+# Pre-req (optional):
+- K6 installed locally for some tests (v0.40.0)
+- Apache httpd installed locally for some tests (v2.4.54)
+
+# Apache config:
+I have made the following changes to the default apache config:
+- Disabled logging to console
+- Tuned the mpm_event_module to avoid hitting Apache resource limits for some tests (to rule out this as the root cause)
+
+# K6 test cases and parameters
+
+The testcase.js uses the following environment variables (as set with the Docker `--env` flag):
+- CASE
+- MULTIPLIER
+- TARGET_HOST
+
+| CASE | Description                                                                                                                                                | What MULTIPLIER controls                                                                                  |
+|------|------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| 1    | My original testcase. Playing back 30 minutes of per-minute traffic using constant-arrival-rate executor, with per-minute variable load and VU-allocation. | Increases the baseline with the MULTIPLIER-factor. 1 is the original rate and 2 is twice that and so on   |
+| 2    | Same as 1, but using ramping-arrival-rate with fixed VU-allocation and per-minute variable load.                                                           | Same as 1                                                                                                 |                             
+| 3    | Runs the maximum number of calls for 30 minutes with VU fixed (as set my MULTIPLIER). This was to model the time-domain of case 1.                         | Number of VU's running in parallel                                                                        |
+| 4    | Runs the same no. of iterations as case 1 as fast as possible, with the given VU-allocation (as set my MULTIPLIER)                                         | Number of VU's to distribute the fixed set of iterations across                                           |
+
+TARGET_HOST always controls what URL to hit.
+
+# Steps:
+Commands intended to run from repo root directory. 
+Between tests run `wsl --shudown` wait 8 seconds for good measures and restart Docker, in order to reset the environment.
+
+## Start Apache
+Windows (run this on a command-prompt on its own, or as a daemon):
+~~~
+docker run -it --rm --name my-apache -h my-apache -p 9080:80 -p 9443:443 -v "%cd%/src/main/apache-httpd/web":/usr/local/apache2/htdocs/ -v "%cd%/src/main/apache-httpd/conf/":/usr/local/apache2/conf/ httpd:2.4.54@sha256:15515209fb17e06010fa5af6fe15fa0351805cc12acfe82771c7724f06c34ae4
+~~~
+
+## Run tests
+For the more extensive description about the various tests and observations, please see the acompaning Medium article at [TBD]
+Note: when pushing beyond a multiplier of 1000 running from the host, I observe `WARN[0004] Request Failed error="Get \"http://localhost:9080/\": dial tcp 127.0.0.1:9080: connectex: No connection could be made because the target machine actively refused it."`. This is not observed within Docker. All tests have been adjusted for this, to keep parameters identical.
+
+Windows (run this on a different command-prompt than the Apache http-server):
+
+Running a single round of testing from K6-in-Docker via `host.docker.internal` to Apache-in-Docker works
+~~~
+docker run --rm --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js
+~~~
+
+Running testing from K6-in-Docker via `host.docker.internal` to Apache-in-Docker (multiple times in a row will trigger issue - issue usually happens with 4-5 consecutive executions.)
+~~~
+FOR /L %G IN (1,1,6) DO docker run --rm --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js 
+~~~
+
+Running testing from K6-in-Docker via `host.docker.internal` to Apache-in-Docker (with spacing in between will *NOT* trigger issue)
+~~~
+FOR /L %G IN (1,1,6) DO docker run --rm --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js && timeout 120
+~~~
+
+Running testing from K6-in-Docker to Apache-in-Docker on Docker-internal networking (will *NOT* trigger issue)
+~~~
+FOR /L %G IN (1,1,6) DO docker run --rm --network container:my-apache --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://my-apache/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js
+~~~
+
+
+
+# Optional
+## HTTPS
+The issue seems accelerated by the use of TLS. If testing this is desirable:
+- Activate TLS-features in httpd.conf
+  - ( 94) `LoadModule socache_shmcb_module modules/mod_socache_shmcb.so`
+  - (161) `LoadModule ssl_module modules/mod_ssl.so`
+  - (542) `Include conf/extra/httpd-ssl.conf`
+- Create certificates
+  - e.g. (I ran this though WSL for the openssl implementation): `openssl req -x509 -newkey rsa:4096 -keyout src/main/apache-httpd/conf/key.pem -out src/main/apache-httpd/conf/cert.pem -sha256 -days 365 -subj "/C=US/ST=Oregon/L=Portland/O=Demo Company/OU=Org/CN=localhost"`
+- If needed, update conf/extras/httpd-ssl.conf (to reflect certificate location and logging preferences if the current edits is not sufficient)
+
+Running testing from K6-on-host to Apache-in-Docker (will *NOT* trigger issue)
+~~~
+FOR /L %G IN (1,1,6) DO k6 --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://localhost:9080/ run src\main\k6\testcase.js
+~~~
+
+## Local Apache httpd
+Install Apache httpd locally and point to it using TARGET_HOST accordingly. Not yet tested/documented though
