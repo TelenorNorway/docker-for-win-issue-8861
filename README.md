@@ -1,8 +1,15 @@
 # docker-for-win-issue-8861
 Repo for PoC code relating to https://github.com/docker/for-win/issues/8861
 
+# Update 2022-11-11
+As of Docker Desktop v4.13.1, the issue is greatly reduced. The below cases do no longer reliably reproduce the issue. Increasing various parameters sometimes yield the same error-message, replacing the command in "Run tests, #2" with e.g.:
+
+~~~
+FOR /L %G IN (1,1,20) DO docker run --rm --env CASE=4 --env MULTIPLIER=2500 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js
+~~~
+
 # Pre-req:
-- Docker
+- Docker (Desktop for windows at least, this testcase has not been verified on other OS/combos)
 
 # Pre-req (optional):
 - K6 installed locally for some tests (v0.40.0)
@@ -44,22 +51,22 @@ For the more extensive description about the various tests and observations, ple
 Note: when pushing beyond a multiplier of 1000 running from the host, I observe `WARN[0004] Request Failed error="Get \"http://localhost:9080/\": dial tcp 127.0.0.1:9080: connectex: No connection could be made because the target machine actively refused it."`. This is not observed within Docker. All tests have been adjusted for this, to keep parameters identical.
 
 Windows (run this on a different command-prompt than the Apache http-server):
-
+### 1
 Running a single round of testing from K6-in-Docker via `host.docker.internal` to Apache-in-Docker works
 ~~~
 docker run --rm --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js
 ~~~
-
+### 2
 Running testing from K6-in-Docker via `host.docker.internal` to Apache-in-Docker (multiple times in a row will trigger issue - issue usually happens with 4-5 consecutive executions.)
 ~~~
 FOR /L %G IN (1,1,6) DO docker run --rm --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js 
 ~~~
-
+### 3
 Running testing from K6-in-Docker via `host.docker.internal` to Apache-in-Docker (with spacing in between will *NOT* trigger issue)
 ~~~
 FOR /L %G IN (1,1,6) DO docker run --rm --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js && timeout 120
 ~~~
-
+### 4
 Running testing from K6-in-Docker to Apache-in-Docker on Docker-internal networking (will *NOT* trigger issue)
 ~~~
 FOR /L %G IN (1,1,6) DO docker run --rm --network container:my-apache --env CASE=4 --env MULTIPLIER=1000 --env TARGET_HOST=http://my-apache/ -i grafana/k6:0.40.0@sha256:239d51c6bebf02edc15ede33b122aec6d08e84f855e0226847830e9283c3bb66 run - <src\main\k6\testcase.js
