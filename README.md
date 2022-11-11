@@ -47,7 +47,7 @@ docker run -it --rm --name my-apache -h my-apache -p 9080:80 -p 9443:443 -v "%cd
 ~~~
 
 ## Run tests
-For the more extensive description about the various tests and observations, please see the acompaning Medium article at [TBD]
+For the more extensive description about the various tests and observations, please see the acompaning Medium article at https://medium.com/@olebhansen/what-i-learned-from-a-wild-goose-chase-with-k6-and-docker-2a7dcfa00265
 Note: when pushing beyond a multiplier of 1000 running from the host, I observe `WARN[0004] Request Failed error="Get \"http://localhost:9080/\": dial tcp 127.0.0.1:9080: connectex: No connection could be made because the target machine actively refused it."`. This is not observed within Docker. All tests have been adjusted for this, to keep parameters identical.
 
 Windows (run this on a different command-prompt than the Apache http-server):
