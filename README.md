@@ -1,6 +1,57 @@
 # docker-for-win-issue-8861
 Repo for PoC code relating to https://github.com/docker/for-win/issues/8861 (which in turn seems to originate from https://github.com/moby/vpnkit/issues/587)
 
+# Update
+
+Case 1
+~~~
+docker run --rm --env VU_COUNT=500 --env ITERS=200 --env TARGET_HOST=http://host.docker.internal:9080/ -i grafana/k6:0.41.0@sha256:f34ad059aebe2bab8951e7aeed946d4445db48b99cf9c79bdc0ab889e5a9fd03 run - <src\main\k6\testcase.js
+~~~
+
+Case 2
+~~~
+docker run --rm --env VU_COUNT=500 --env ITERS=200 --env TARGET_HOST=http://my-apache/ --network container:my-apache -i grafana/k6:0.41.0@sha256:f34ad059aebe2bab8951e7aeed946d4445db48b99cf9c79bdc0ab889e5a9fd03 run - <src\main\k6\testcase.js
+~~~
+
+
+| case | docker version | 
+|-----|---|
+|      | 4.13.1 |
+| 1    |    ✓ Free of 'dial: i/o-timeouts'
+     ✓ Free of 'Connect: connection refused'
+     ✗ Free from other errors
+      ↳  99% — ✓ 27982 / ✗ 18
+     ✗ Response from server
+      ↳  99% — ✓ 27982 / ✗ 18
+     ✗ HTTP/200 responses
+      ↳  99% — ✓ 27982 / ✗ 18
+     ✗ Content as Expected
+      ↳  99% — ✓ 27982 / ✗ 18
+
+     █ setup
+
+     checks.........................: 99.95% ✓ 167928     ✗ 72
+     data_received..................: 6.9 MB 43 kB/s
+     data_sent......................: 4.5 MB 28 kB/s
+     http_req_blocked...............: avg=5.03s    min=2.5µs   med=5.57s   max=8.77s  p(90)=7.14s    p(95)=7.49s
+     http_req_connecting............: avg=469.42ms min=0s      med=0s      max=8.76s  p(90)=2.58s    p(95)=3.91s
+     http_req_duration..............: avg=15.07s   min=3.15s   med=16.93s  max=1m0s   p(90)=21.8s    p(95)=22.5s
+       { expected_response:true }...: avg=15.04s   min=3.15s   med=16.93s  max=24.85s p(90)=21.78s   p(95)=22.5s
+     http_req_failed................: 0.06%  ✓ 18         ✗ 27982
+     http_req_receiving.............: avg=150.31µs min=0s      med=116.7µs max=35.9ms p(90)=202.81µs p(95)=256µs
+     http_req_sending...............: avg=9.04s    min=8.1µs   med=11.05s  max=17.55s p(90)=14.22s   p(95)=14.82s
+     http_req_tls_handshaking.......: avg=0s       min=0s      med=0s      max=0s     p(90)=0s       p(95)=0s
+     http_req_waiting...............: avg=6.02s    min=2.53s   med=5.98s   max=48.78s p(90)=7.66s    p(95)=7.95s
+     http_reqs......................: 28000  173.299497/s
+     iteration_duration.............: avg=15.57s   min=395.5µs med=16.93s  max=1m0s   p(90)=21.8s    p(95)=22.5s
+     iterations.....................: 28000  173.299497/s
+     vus............................: 150    min=0        max=2800
+     vus_max........................: 2800   min=2459     max=2800 
+| 
+
+
+
+
 # Update 2022-12-13
 * Added link to suspected root-issue; https://github.com/moby/vpnkit/issues/587
 * Updated k6 to v0.41.0 (grafana/k6:0.41.0@sha256:f34ad059aebe2bab8951e7aeed946d4445db48b99cf9c79bdc0ab889e5a9fd03)
@@ -49,7 +100,7 @@ TARGET_HOST always controls what URL to hit.
 
 # Steps:
 Commands intended to run from repo root directory. 
-Between tests run `wsl --shudown` wait 8 seconds for good measures and restart Docker, in order to reset the environment.
+Between tests run `wsl --shutdown` wait 8 seconds for good measures and restart Docker, in order to reset the environment.
 
 ## Start Apache
 Windows (run this on a command-prompt on its own, or as a daemon):
